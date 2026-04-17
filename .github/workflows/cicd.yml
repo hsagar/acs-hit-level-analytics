@@ -72,3 +72,89 @@ jobs:
           name: skr-lambda
           path: skr_lambda.zip
           retention-days: 1
+
+            # ── Job 2: CD — runs on push to main only, after CI passes ───────────────────
+
+  # Job 2: CD — runs on push to main only, after CI passes
+  cd:
+    name: CD — Deploy to AWS
+    needs: ci
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install SAM CLI
+        uses: aws-actions/setup-sam@v2
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: SAM Build
+        run: sam build --template infrastructure/template.yaml
+
+      - name: SAM Deploy
+        run: |
+          sam deploy \
+            --stack-name skr-pipeline-${{ env.APP_ENV }} \
+            --s3-bucket ${{ secrets.SAM_ARTIFACTS_BUCKET }} \
+            --parameter-overrides \
+                Environment=${{ env.APP_ENV }} \
+                AccountId=${{ secrets.AWS_ACCOUNT_ID }} \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --region ${{ env.AWS_REGION }} \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset
+
+      - name: Smoke test — upload sample file
+        run: |
+          RAW_BUCKET="skr-raw-${{ env.APP_ENV }}-${{ secrets.AWS_ACCOUNT_ID }}"
+          aws s3 cp tests/data/sample_input.tsv s3://${RAW_BUCKET}/raw/smoke_test_${{ github.run_id }}.tsv
+          echo "Uploaded to s3://${RAW_BUCKET}/raw/smoke_test_${{ github.run_id }}.tsv"
+
+      - name: Smoke test — wait for output
+        run: |
+          PROCESSED_BUCKET="skr-processed-${{ env.APP_ENV }}-${{ secrets.AWS_ACCOUNT_ID }}"
+          TODAY=$(date +%Y-%m-%d)
+          echo "Waiting for Lambda output in s3://${PROCESSED_BUCKET}/processed/ ..."
+
+          for i in $(seq 1 12); do
+            sleep 5
+            FOUND=$(aws s3 ls s3://${PROCESSED_BUCKET}/processed/ | grep "${TODAY}" | wc -l)
+            if [ "$FOUND" -gt "0" ]; then
+              echo "Output found after $((i * 5)) seconds:"
+              aws s3 ls s3://${PROCESSED_BUCKET}/processed/ | grep "${TODAY}"
+              exit 0
+            fi
+            echo "Attempt ${i}/12 — no output yet, retrying in 5s..."
+          done
+
+          echo "ERROR: No output file found after 60 seconds."
+          echo "Check Lambda logs:"
+          echo "  aws logs tail /aws/lambda/search-keyword-revenue-${{ env.APP_ENV }} --region ${{ env.AWS_REGION }}"
+          exit 1
+
+      - name: Print deployment summary
+        run: |
+          echo ""
+          echo "==========================================="
+          echo "  Deployment complete"
+          echo "==========================================="
+          echo "  Stack:     skr-pipeline-${{ env.APP_ENV }}"
+          echo "  Region:    ${{ env.AWS_REGION }}"
+          echo "  Lambda:    search-keyword-revenue-${{ env.APP_ENV }}"
+          echo "  Raw:       s3://skr-raw-${{ env.APP_ENV }}-${{ secrets.AWS_ACCOUNT_ID }}"
+          echo "  Processed: s3://skr-processed-${{ env.APP_ENV }}-${{ secrets.AWS_ACCOUNT_ID }}"
+          echo "  Commit:    ${{ github.sha }}"
+          echo "==========================================="
