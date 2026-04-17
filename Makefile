@@ -1,16 +1,19 @@
-.PHONY: install test lint lint-fix run clean
+.PHONY: install test lint lint-fix format run clean
 
 install:
 	uv sync --extra dev
 
 test:
-	uv run pytest
+	uv run pytest tests/ -v --cov=search_keyword_revenue --cov-fail-under=90
 
 lint:
 	uv run ruff check src/ tests/
 
 lint-fix:
 	uv run ruff check --fix src/ tests/
+
+format:
+	uv run ruff format src/ tests/
 
 run:
 	uv run python -m search_keyword_revenue.cli data/sample_input.tsv
