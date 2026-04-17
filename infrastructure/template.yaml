@@ -1,0 +1,126 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: ACS Hit-Level Analytics — Search Keyword Revenue Pipeline
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+    Description: Deployment environment (used in resource names and Lambda env var)
+  AccountId:
+    Type: String
+    Description: AWS Account ID — appended to bucket names to ensure global uniqueness
+
+Globals:
+  Function:
+    Runtime: python3.13
+    Architectures: [x86_64]
+    Timeout: 60
+    MemorySize: 512
+
+Resources:
+
+  # S3: Processed output bucket (created first — no circular dependency)
+
+  ProcessedBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "skr-processed-${Environment}-${AccountId}"
+
+  # IAM: Lambda execution role with S3 access permissions
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "skr-lambda-role-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: skr-s3-access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub "arn:aws:s3:::skr-raw-${Environment}-${AccountId}"
+                  - !Sub "arn:aws:s3:::skr-raw-${Environment}-${AccountId}/*"
+                  - !GetAtt ProcessedBucket.Arn
+                  - !Sub "${ProcessedBucket.Arn}/*"
+
+  # Lambda: Pipeline function with S3 trigger on the raw bucket
+
+  PipelineFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "search-keyword-revenue-${Environment}"
+      Handler: search_keyword_revenue.lambda_handler.handler
+      CodeUri: ../src/
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          APP_ENV: !Ref Environment
+          PROCESSED_BUCKET: !Ref ProcessedBucket
+          RAW_BUCKET: !Sub "skr-raw-${Environment}-${AccountId}"
+
+  # Lambda permission: allow S3 to invoke the function
+
+  LambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt PipelineFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: s3.amazonaws.com
+      SourceArn: !Sub "arn:aws:s3:::skr-raw-${Environment}-${AccountId}"
+      SourceAccount: !Ref AccountId
+
+  # S3: Raw input bucket with event notification 
+
+  RawBucket:
+    Type: AWS::S3::Bucket
+    DependsOn: LambdaInvokePermission
+    Properties:
+      BucketName: !Sub "skr-raw-${Environment}-${AccountId}"
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: raw/
+            Function: !GetAtt PipelineFunction.Arn
+
+  # CloudWatch: Log group with 30-day retention
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/search-keyword-revenue-${Environment}"
+      RetentionInDays: 30
+
+Outputs:
+  RawBucketName:
+    Value: !Ref RawBucket
+    Description: Upload TSV files to the raw/ prefix of this bucket to trigger the pipeline
+  ProcessedBucketName:
+    Value: !Ref ProcessedBucket
+    Description: Pipeline output tab files are written to the processed/ prefix here
+  LambdaFunctionName:
+    Value: !Ref PipelineFunction
+    Description: Lambda function name
+  LambdaFunctionArn:
+    Value: !GetAtt PipelineFunction.Arn
+    Description: Lambda function ARN
