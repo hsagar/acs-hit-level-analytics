@@ -21,14 +21,14 @@ Globals:
 
 Resources:
 
-  # ── S3: Processed output bucket (created first — no circular dependency) ──────
+  # S3: Processed output bucket (created first — no circular dependency)
 
   ProcessedBucket:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub "skr-processed-${Environment}-${AccountId}"
 
-  # ── IAM: Lambda execution role ────────────────────────────────────────────────
+  # IAM: Lambda execution role with S3 access permissions
 
   LambdaExecutionRole:
     Type: AWS::IAM::Role
@@ -60,7 +60,7 @@ Resources:
                   - !GetAtt ProcessedBucket.Arn
                   - !Sub "${ProcessedBucket.Arn}/*"
 
-  # ── Lambda: Pipeline function ─────────────────────────────────────────────────
+  # Lambda: Pipeline function with S3 trigger on the raw bucket
 
   PipelineFunction:
     Type: AWS::Serverless::Function
@@ -75,8 +75,7 @@ Resources:
           PROCESSED_BUCKET: !Ref ProcessedBucket
           RAW_BUCKET: !Sub "skr-raw-${Environment}-${AccountId}"
 
-  # ── Lambda permission: allow S3 to invoke the function ────────────────────────
-  # Must be created before RawBucket so CloudFormation can wire the notification.
+  # Lambda permission: allow S3 to invoke the function
 
   LambdaInvokePermission:
     Type: AWS::Lambda::Permission
@@ -87,9 +86,7 @@ Resources:
       SourceArn: !Sub "arn:aws:s3:::skr-raw-${Environment}-${AccountId}"
       SourceAccount: !Ref AccountId
 
-  # ── S3: Raw input bucket with event notification ──────────────────────────────
-  # DependsOn LambdaInvokePermission ensures the permission exists before S3
-  # tries to validate it when setting up the notification configuration.
+  # S3: Raw input bucket with event notification 
 
   RawBucket:
     Type: AWS::S3::Bucket
@@ -106,7 +103,7 @@ Resources:
                     Value: raw/
             Function: !GetAtt PipelineFunction.Arn
 
-  # ── CloudWatch: Log group with 30-day retention ───────────────────────────────
+  # CloudWatch: Log group with 30-day retention
 
   LogGroup:
     Type: AWS::Logs::LogGroup
