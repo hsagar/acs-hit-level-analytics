@@ -73,8 +73,6 @@ jobs:
           path: skr_lambda.zip
           retention-days: 1
 
-            # ── Job 2: CD — runs on push to main only, after CI passes ───────────────────
-
   # Job 2: CD — runs on push to main only, after CI passes
   cd:
     name: CD — Deploy to AWS
