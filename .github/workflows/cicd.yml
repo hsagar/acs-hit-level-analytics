@@ -1,0 +1,72 @@
+name: CI/CD
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main, develop]
+
+env:
+  PYTHON_VERSION: '3.13'
+  AWS_REGION: us-east-1
+  APP_ENV: dev
+
+jobs:
+
+  # Job 1: CI — runs on every push and pull request
+  ci:
+    name: CI — Lint and Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Lint — ruff
+        run: uv run ruff check src/ tests/
+
+      - name: Run tests
+        run: uv run pytest tests/
+
+      - name: Build Lambda package
+        run: |
+          mkdir -p lambda_package
+
+          # Install pandas compiled for Lambda's linux/x86_64 runtime
+          pip install pandas \
+            --platform manylinux2014_x86_64 \
+            --target lambda_package/ \
+            --implementation cp \
+            --python-version 3.13 \
+            --only-binary=:all: \
+            --quiet
+
+          # Copy application source
+          cp -r src/search_keyword_revenue lambda_package/
+
+          # Zip, excluding bytecode and cache dirs
+          cd lambda_package
+          zip -r ../skr_lambda.zip . \
+            --exclude "*.pyc" \
+            --exclude "*/__pycache__/*"
+          cd ..
+
+          echo "Lambda package size: $(du -sh skr_lambda.zip | cut -f1)"
+
+      - name: Upload Lambda artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: skr-lambda
+          path: skr_lambda.zip
+          retention-days: 1
