@@ -40,6 +40,7 @@ jobs:
         run: uv run pytest tests/
 
       - name: Build Lambda package
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
           mkdir -p lambda_package
 
@@ -65,6 +66,7 @@ jobs:
           echo "Lambda package size: $(du -sh skr_lambda.zip | cut -f1)"
 
       - name: Upload Lambda artifact
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         uses: actions/upload-artifact@v4
         with:
           name: skr-lambda
