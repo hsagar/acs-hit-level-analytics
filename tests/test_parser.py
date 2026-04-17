@@ -14,6 +14,7 @@ from search_keyword_revenue.parser import (
 
 # Helpers
 
+
 def _run_pipeline(df: pd.DataFrame, tmp_path: Path) -> pd.DataFrame:
     """Write fixture to a temp TSV file and execute the full pipeline."""
     input_file = tmp_path / "input.tsv"
@@ -22,6 +23,7 @@ def _run_pipeline(df: pd.DataFrame, tmp_path: Path) -> pd.DataFrame:
 
 
 # parse_search_referrer
+
 
 def test_parse_search_referrer_google_returns_domain_and_keyword():
     se_domain, keyword = parse_search_referrer("http://www.google.com/search?q=ipod")
@@ -45,6 +47,7 @@ def test_parse_search_referrer_empty_string_returns_none_pair():
 
 
 # parse_revenue
+
 
 def test_parse_revenue_single_product():
     result = parse_revenue("Electronics;Ipod;1;290.00;1")
@@ -78,6 +81,7 @@ def test_parse_revenue_empty_string_returns_zero():
 
 # is_purchase
 
+
 def test_is_purchase_event_1_present_returns_true():
     assert is_purchase("1") is True
 
@@ -100,6 +104,7 @@ def test_is_purchase_does_not_match_composite_event_id():
 
 # HitLevelParser — pipeline integration tests
 
+
 def test_happy_path_single_purchase(single_purchase_from_google: pd.DataFrame, tmp_path: Path):
     result = _run_pipeline(single_purchase_from_google, tmp_path)
 
@@ -121,9 +126,7 @@ def test_revenue_attributed_after_internal_navigation(
     assert result.iloc[0]["Revenue"] == "150.00"
 
 
-def test_two_ips_attributed_independently(
-    two_ips_different_engines: pd.DataFrame, tmp_path: Path
-):
+def test_two_ips_attributed_independently(two_ips_different_engines: pd.DataFrame, tmp_path: Path):
     result = _run_pipeline(two_ips_different_engines, tmp_path)
 
     domains = set(result["Search Engine Domain"])
@@ -131,34 +134,26 @@ def test_two_ips_attributed_independently(
     assert len(result) == 2
 
 
-def test_purchase_without_se_referrer_excluded(
-    purchase_no_se_referrer: pd.DataFrame, tmp_path: Path
-):
+def test_purchase_without_se_referrer_excluded(purchase_no_se_referrer: pd.DataFrame, tmp_path: Path):
     result = _run_pipeline(purchase_no_se_referrer, tmp_path)
 
     assert len(result) == 0
 
 
-def test_zero_revenue_purchase_excluded(
-    zero_revenue_purchase: pd.DataFrame, tmp_path: Path
-):
+def test_zero_revenue_purchase_excluded(zero_revenue_purchase: pd.DataFrame, tmp_path: Path):
     result = _run_pipeline(zero_revenue_purchase, tmp_path)
 
     assert len(result) == 0
 
 
-def test_negative_revenue_included(
-    negative_revenue: pd.DataFrame, tmp_path: Path
-):
+def test_negative_revenue_included(negative_revenue: pd.DataFrame, tmp_path: Path):
     result = _run_pipeline(negative_revenue, tmp_path)
 
     assert len(result) == 1
     assert result.iloc[0]["Revenue"] == "-50.00"
 
 
-def test_unsorted_input_sorted_before_processing(
-    unsorted_hits: pd.DataFrame, tmp_path: Path
-):
+def test_unsorted_input_sorted_before_processing(unsorted_hits: pd.DataFrame, tmp_path: Path):
     result = _run_pipeline(unsorted_hits, tmp_path)
 
     assert len(result) == 1
@@ -166,9 +161,7 @@ def test_unsorted_input_sorted_before_processing(
     assert result.iloc[0]["Revenue"] == "100.00"
 
 
-def test_url_encoded_keyword_decoded(
-    url_encoded_keyword: pd.DataFrame, tmp_path: Path
-):
+def test_url_encoded_keyword_decoded(url_encoded_keyword: pd.DataFrame, tmp_path: Path):
     result = _run_pipeline(url_encoded_keyword, tmp_path)
 
     assert len(result) == 1
@@ -183,17 +176,13 @@ def test_yahoo_uses_p_param(yahoo_p_param: pd.DataFrame, tmp_path: Path):
     assert result.iloc[0]["Search Keyword"] == "walkman"
 
 
-def test_malformed_referrer_does_not_crash(
-    malformed_referrer: pd.DataFrame, tmp_path: Path
-):
+def test_malformed_referrer_does_not_crash(malformed_referrer: pd.DataFrame, tmp_path: Path):
     result = _run_pipeline(malformed_referrer, tmp_path)
 
     assert isinstance(result, pd.DataFrame)
 
 
-def test_null_referrer_does_not_overwrite_se(
-    null_referrer: pd.DataFrame, tmp_path: Path
-):
+def test_null_referrer_does_not_overwrite_se(null_referrer: pd.DataFrame, tmp_path: Path):
     result = _run_pipeline(null_referrer, tmp_path)
 
     assert len(result) == 1
@@ -201,18 +190,14 @@ def test_null_referrer_does_not_overwrite_se(
     assert result.iloc[0]["Search Keyword"] == "ipod"
 
 
-def test_subdomain_matches_parent_engine(
-    subdomain_referrer: pd.DataFrame, tmp_path: Path
-):
+def test_subdomain_matches_parent_engine(subdomain_referrer: pd.DataFrame, tmp_path: Path):
     result = _run_pipeline(subdomain_referrer, tmp_path)
 
     assert len(result) == 1
     assert result.iloc[0]["Search Engine Domain"] == "google.com"
 
 
-def test_keywords_lowercased_by_pipeline(
-    case_sensitive_keywords: pd.DataFrame, tmp_path: Path
-):
+def test_keywords_lowercased_by_pipeline(case_sensitive_keywords: pd.DataFrame, tmp_path: Path):
     # The pipeline lowercases the full referrer URL before parsing, so q=Ipod
     # and q=ipod both produce keyword "ipod". The two IPs aggregate into one row.
     result = _run_pipeline(case_sensitive_keywords, tmp_path)
@@ -222,9 +207,7 @@ def test_keywords_lowercased_by_pipeline(
     assert result.iloc[0]["Revenue"] == "480.00"
 
 
-def test_multiple_products_revenue_summed(
-    multiple_products_in_purchase: pd.DataFrame, tmp_path: Path
-):
+def test_multiple_products_revenue_summed(multiple_products_in_purchase: pd.DataFrame, tmp_path: Path):
     result = _run_pipeline(multiple_products_in_purchase, tmp_path)
 
     assert len(result) == 1
@@ -240,26 +223,20 @@ def test_missing_required_column_raises_value_error(tmp_path: Path):
         HitLevelParser().run(str(input_file))
 
 
-def test_output_sorted_by_revenue_descending(
-    two_ips_different_engines: pd.DataFrame, tmp_path: Path
-):
+def test_output_sorted_by_revenue_descending(two_ips_different_engines: pd.DataFrame, tmp_path: Path):
     result = _run_pipeline(two_ips_different_engines, tmp_path)
 
     revenues = result["Revenue"].tolist()
     assert revenues == sorted(revenues, reverse=True)
 
 
-def test_output_columns_named_correctly(
-    single_purchase_from_google: pd.DataFrame, tmp_path: Path
-):
+def test_output_columns_named_correctly(single_purchase_from_google: pd.DataFrame, tmp_path: Path):
     result = _run_pipeline(single_purchase_from_google, tmp_path)
 
     assert list(result.columns) == ["Search Engine Domain", "Search Keyword", "Revenue"]
 
 
-def test_duplicate_rows_revenue_not_double_counted(
-    duplicate_rows: pd.DataFrame, tmp_path: Path
-):
+def test_duplicate_rows_revenue_not_double_counted(duplicate_rows: pd.DataFrame, tmp_path: Path):
     result = _run_pipeline(duplicate_rows, tmp_path)
 
     assert len(result) == 1

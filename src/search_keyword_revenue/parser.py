@@ -1,7 +1,7 @@
 """Hit-level data parser for search keyword revenue attribution.
 
-Pipeline: load → validate → sort → parse referrers → propagate (ffill) →
-          filter purchases → parse revenue → aggregate
+Pipeline: load -> validate -> sort -> parse referrers -> propagate (ffill) ->
+          filter purchases -> parse revenue -> aggregate
 """
 
 import logging
@@ -21,25 +21,25 @@ def normalize_domain(hostname: str) -> str:
     (www.google.com -> google.com, images.google.com -> google.com, serach.yahoo.com -> yahoo.com)
     """
     if not hostname:
-        return ''
+        return ""
 
-    parts = hostname.lower().split('.')
+    parts = hostname.lower().split(".")
 
-    return hostname.lower() if len(parts) == 1 else '.'.join(parts[-2:])
+    return hostname.lower() if len(parts) == 1 else ".".join(parts[-2:])
 
 
 def parse_search_referrer(referrer: str) -> tuple:
     """Parse a referrer URL and return (se_domain, keyword) for known search engines.
 
     Returns (None, None) if the referrer is not a recognised search engine URL.
-    URL decoding (including + → space) is handled by urllib.parse.parse_qs.
+    URL decoding (including + -> space) is handled by urllib.parse.parse_qs.
     """
     if not referrer:
         return None, None
 
     try:
         parsed = urlparse(referrer)
-        net_loc = normalize_domain(parsed.hostname or '')
+        net_loc = normalize_domain(parsed.hostname or "")
 
         matched_engine: str | None = None
         for domain in SEARCH_ENGINES:
@@ -60,7 +60,7 @@ def parse_search_referrer(referrer: str) -> tuple:
         return matched_engine, values[0]
 
     except Exception as exc:
-        logger.warning('Failed to parse referrer %r: %s', referrer, exc)
+        logger.warning("Failed to parse referrer %r: %s", referrer, exc)
         return None, None
 
 
@@ -75,15 +75,15 @@ def parse_revenue(product_list: str) -> float:
         return 0.0
 
     total = 0.0
-    for product in product_list.split(','):
-        parts = product.split(';')
+    for product in product_list.split(","):
+        parts = product.split(";")
         if len(parts) > 3:
             revenue_str = parts[3].strip()
             if revenue_str:
                 try:
                     total += float(revenue_str)
                 except ValueError:
-                    logger.warning('Could not parse revenue value %r in product_list', revenue_str)
+                    logger.warning("Could not parse revenue value %r in product_list", revenue_str)
 
     return total
 
@@ -93,7 +93,7 @@ def is_purchase(event_list: str) -> bool:
     if not event_list:
         return False
 
-    return EVENT_TYPES.purchase in event_list.split(',')
+    return EVENT_TYPES.purchase in event_list.split(",")
 
 
 class HitLevelParser:
@@ -124,7 +124,7 @@ class HitLevelParser:
     def _load(self, filepath: str) -> pd.DataFrame:
         df: pd.DataFrame = pd.read_csv(
             filepath,
-            sep='\t',
+            sep="\t",
             dtype=str,
             keep_default_na=False,
         )
@@ -133,28 +133,28 @@ class HitLevelParser:
     def _validate_columns(self, df: pd.DataFrame) -> None:
         missing = set(REQUIRED_COLUMNS) - set(df.columns)
         if missing:
-            raise ValueError(f'Missing required columns: {missing}')
+            raise ValueError(f"Missing required columns: {missing}")
 
     def _sort_by_time(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
-        df['hit_time_gmt'] = pd.to_numeric(df['hit_time_gmt'], errors='coerce')
-        return df.sort_values('hit_time_gmt').reset_index(drop=True)
+        df["hit_time_gmt"] = pd.to_numeric(df["hit_time_gmt"], errors="coerce")
+        return df.sort_values("hit_time_gmt").reset_index(drop=True)
 
     def _parse_referrers(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
-        df['referrer'] = df['referrer'].str.lower().fillna('')
+        df["referrer"] = df["referrer"].str.lower().fillna("")
 
-        parsed = df['referrer'].apply(parse_search_referrer)
-        df['se_domain'] = [x[0] for x in parsed]
-        df['se_keyword'] = [x[1] for x in parsed]
+        parsed = df["referrer"].apply(parse_search_referrer)
+        df["se_domain"] = [x[0] for x in parsed]
+        df["se_keyword"] = [x[1] for x in parsed]
 
         return df
 
     def _propagate_referrers(self, df: pd.DataFrame) -> pd.DataFrame:
         """Forward-fill SE referrer within each IP group (last-touch attribution)."""
         df = df.copy()
-        df['se_domain'] = df.groupby('ip', sort=False)['se_domain'].ffill()
-        df['se_keyword'] = df.groupby('ip', sort=False)['se_keyword'].ffill()
+        df["se_domain"] = df.groupby("ip", sort=False)["se_domain"].ffill()
+        df["se_keyword"] = df.groupby("ip", sort=False)["se_keyword"].ffill()
         return df
 
     # def _propagate_referrers(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -165,36 +165,30 @@ class HitLevelParser:
     #     return df
 
     def _filter_purchases(self, df: pd.DataFrame) -> pd.DataFrame:
-        mask = df['event_list'].apply(
-            lambda e: is_purchase(e if isinstance(e, str) else '')
-        )
+        mask = df["event_list"].apply(lambda e: is_purchase(e if isinstance(e, str) else ""))
         return df[mask].copy()
 
     def _parse_revenue(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
-        df['revenue'] = df['product_list'].apply(
-            lambda p: parse_revenue(p if isinstance(p, str) else '')
-        )
+        df["revenue"] = df["product_list"].apply(lambda p: parse_revenue(p if isinstance(p, str) else ""))
         return df
 
     def _aggregate(self, df: pd.DataFrame) -> pd.DataFrame:
-        df = df.dropna(subset=['se_domain', 'se_keyword'])
+        df = df.dropna(subset=["se_domain", "se_keyword"])
 
-        result: pd.DataFrame = (
-            df.groupby(['se_domain', 'se_keyword'], as_index=False)['revenue'].sum()
-        )
+        result: pd.DataFrame = df.groupby(["se_domain", "se_keyword"], as_index=False)["revenue"].sum()
 
-        result = result[result['revenue'] != 0]
-        result = result.sort_values('revenue', ascending=False).reset_index(drop=True)
+        result = result[result["revenue"] != 0]
+        result = result.sort_values("revenue", ascending=False).reset_index(drop=True)
 
         result = result.rename(
             columns={
-                'se_domain': 'Search Engine Domain',
-                'se_keyword': 'Search Keyword',
-                'revenue': 'Revenue',
+                "se_domain": "Search Engine Domain",
+                "se_keyword": "Search Keyword",
+                "revenue": "Revenue",
             }
         )
 
-        result['Revenue'] = result['Revenue'].map(lambda x: f'{x:.2f}')
+        result["Revenue"] = result["Revenue"].map(lambda x: f"{x:.2f}")
 
         return result
