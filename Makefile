@@ -1,7 +1,10 @@
-.PHONY: install test lint lint-fix format run clean
+.PHONY: install install-spark test lint lint-fix format run run-spark clean
 
 install:
 	uv sync --extra dev
+
+install-spark:
+	uv sync --extra dev --extra spark
 
 test:
 	uv run pytest tests/ -v --cov=search_keyword_revenue --cov-fail-under=90
@@ -17,6 +20,16 @@ format:
 
 run:
 	uv run python -m search_keyword_revenue.cli data/sample_input.tsv
+
+run-spark:
+	.venv/bin/spark-submit \
+		--master "local[*]" \
+		--name "SKR Spark Job" \
+		--driver-memory 1g \
+		--conf spark.ui.enabled=false \
+		--conf spark.sql.shuffle.partitions=4 \
+		--conf spark.hadoop.hadoop.security.authentication=simple \
+		src/search_keyword_revenue/spark/cli.py spark_data/ --output-dir spark_output/
 
 clean:
 	find . -type d -name __pycache__ | xargs rm -rf
