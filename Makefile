@@ -1,4 +1,4 @@
-.PHONY: install test lint lint-fix run clean
+.PHONY: install test lint lint-fix format run clean
 
 install:
 	uv sync --extra dev
