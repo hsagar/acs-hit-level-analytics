@@ -114,5 +114,4 @@ class SparkHitLevelJob:
             .withColumnRenamed("se_domain", "Search Engine Domain")
             .withColumnRenamed("se_keyword", "Search Keyword")
             .withColumn("Revenue", F.format_number(F.col("revenue"), 2))
-            .drop("revenue")
         )
