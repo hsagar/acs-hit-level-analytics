@@ -44,6 +44,9 @@ Thumbs.db
 *.tab
 !tests/data/expected_output.tab
 
+# Spark output
+spark_output/
+
 # SAM build artifacts
 .aws-sam/
 

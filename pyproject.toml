@@ -11,6 +11,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+spark = [
+    "pyspark>=3.5",
+]
 dev = [
     "pytest>=9.0.3",
     "pytest-mock>=3.15.1",
@@ -22,6 +25,7 @@ dev = [
 
 [project.scripts]
 skr = "search_keyword_revenue.cli:main"
+skr-spark = "search_keyword_revenue.spark.cli:main"
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]
